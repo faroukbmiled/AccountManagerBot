@@ -5,6 +5,7 @@ import os
 from functools import wraps
 from telegram.ext import CallbackContext
 from threading import Thread
+import codecs
 from telegram import __version__ as TG_VER
 from io import BytesIO
 import time
@@ -28,8 +29,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ALLOWED_USER_ID = int("USERID")
-BOT_TOKEN = "BOTTOKEN"
+ALLOWED_USER_ID = int("userid")
+BOT_TOKEN = "bottoken"
 ENCODING = "utf-8"
 
 bot_commands = [
@@ -103,7 +104,7 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         response = []
         for filename in os.listdir():
             if filename.endswith(".txt"):
-                with open(filename, 'r', encoding='utf-8') as file_handle:
+                with codecs.open(filename, 'r', encoding='utf-8', errors='ignore') as file_handle:
                     for line in file_handle:
                         line = line.strip()
                         parts = line.split(":")
@@ -135,7 +136,7 @@ async def search_command_raw(update: Update, context: ContextTypes.DEFAULT_TYPE)
         response = []
         for filename in os.listdir():
             if filename.endswith(".txt"):
-                with open(filename, 'r', encoding='utf-8') as file_handle:
+                with codecs.open(filename, 'r', encoding='utf-8', errors='ignore') as file_handle:
                     for line in file_handle:
                         line = line.strip()
                         parts = line.split(":")
@@ -172,7 +173,7 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         def process_file(filepath):
             nonlocal resultfound, response
 
-            with open(filepath, 'r', encoding='utf-8') as file_handle:
+            with codecs.open(filepath, 'r', encoding='utf-8', errors='ignore') as file_handle:
                 for line in file_handle:
                     line = line.strip()
                     parts = line.split(":")
