@@ -4,6 +4,7 @@ import logging
 import os
 from functools import wraps
 from telegram.ext import CallbackContext
+from threading import Thread
 from telegram import __version__ as TG_VER
 from io import BytesIO
 import time
@@ -99,28 +100,18 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         query = ' '.join(update.message.text.split()[1:])
         await update.message.reply_text(f"This may take a while, please wait...")
 
-        data = []
-        filename = f"{query}.txt"
-        if os.path.isfile(filename):
-            with open(filename, 'r', encoding='utf-8') as file_handle:
-                data.extend(file_handle.readlines())
-        else:
-            for file in os.listdir():
-                if '.txt' in file:
-                    with open(file, 'r', encoding='utf-8') as file_handle:
-                        data.extend(file_handle.readlines())
-
-        lines = [line.strip() for line in data]
-        resultfound = False
         response = []
-
-        for line in lines:
-            parts = line.split(":")
-            if len(parts) >= 3 and query in parts[1]:
-                resultfound = True
-                username = parts[2].strip() if len(parts) > 2 and parts[2].strip() != "" else "index has no username"
-                password = parts[3].strip() if len(parts) > 3 else "index has no password"
-                response.append(f"\nUsername: {username}\nPassword: {password}")
+        for filename in os.listdir():
+            if filename.endswith(".txt"):
+                with open(filename, 'r', encoding='utf-8') as file_handle:
+                    for line in file_handle:
+                        line = line.strip()
+                        parts = line.split(":")
+                        if len(parts) >= 4 and query in parts[1]:
+                            resultfound = True
+                            username = parts[2].strip() if len(parts) > 2 and parts[2].strip() != "" else "index has no username"
+                            password = parts[3].strip() if len(parts) > 3 else "index has no password"
+                            response.append(f"\nUsername: {username}\nPassword: {password}")
 
         if resultfound:
             formatted_response = "\n".join(response)
@@ -141,27 +132,17 @@ async def search_command_raw(update: Update, context: ContextTypes.DEFAULT_TYPE)
         query = ' '.join(update.message.text.split()[1:])
         await update.message.reply_text(f"This may take a while, please wait...")
 
-        data = []
-        filename = f"{query}.txt"
-        if os.path.isfile(filename):
-            with open(filename, 'r', encoding='utf-8') as file_handle:
-                data.extend(file_handle.readlines())
-        else:
-            for file in os.listdir():
-                if '.txt' in file:
-                    with open(file, 'r', encoding='utf-8') as file_handle:
-                        data.extend(file_handle.readlines())
-
-        lines = [line.strip() for line in data]
-        resultfound = False
         response = []
-
-        for line in lines:
-            parts = line.split(":")
-            if len(parts) >= 3 and query in parts[1]:
-                resultfound = True
-                username_password = ":".join(parts[2:4])
-                response.append(username_password)
+        for filename in os.listdir():
+            if filename.endswith(".txt"):
+                with open(filename, 'r', encoding='utf-8') as file_handle:
+                    for line in file_handle:
+                        line = line.strip()
+                        parts = line.split(":")
+                        if len(parts) >= 4 and query in parts[1]:
+                            resultfound = True
+                            username_password = ":".join(parts[2:4])
+                            response.append(username_password)
 
         if resultfound:
             formatted_response = "\n".join(response)
@@ -184,22 +165,31 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             os.remove(f"{query}.txt")
         except:
             pass
-        data = []
 
-        for file in os.listdir():
-            if '.txt' in file:
-                with open(file, 'r', encoding='utf-8') as file_handle:
-                    data.extend(file_handle.readlines())
-
-        lines = [line.strip() for line in data]
         resultfound = False
         response = []
 
-        for line in lines:
-            parts = line.split(":")
-            if len(parts) >= 4 and query in parts[1]:
-                resultfound = True
-                response.append(line)
+        def process_file(filepath):
+            nonlocal resultfound, response
+
+            with open(filepath, 'r', encoding='utf-8') as file_handle:
+                for line in file_handle:
+                    line = line.strip()
+                    parts = line.split(":")
+                    if len(parts) >= 4 and query in parts[1]:
+                        resultfound = True
+                        response.append(line)
+
+        file_paths = [os.path.join(".", filename) for filename in os.listdir(".") if filename.endswith(".txt")]
+
+        threads = []
+        for filepath in file_paths:
+            thread = Thread(target=process_file, args=(filepath,))
+            thread.start()
+            threads.append(thread)
+
+        for thread in threads:
+            thread.join()
 
         if resultfound:
             formatted_response = "\n".join(response)
