@@ -18,7 +18,7 @@ if __version_info__ < (20, 0, 0, "alpha", 1):
         f"{TG_VER} version of this Bot, "
         f"visit https://docs.python-telegram-bot.org/en/v{TG_VER}/examples.html"
     )
-from telegram import ForceReply, Update, InputFile
+from telegram import ForceReply, Update, InputFile, BotCommand, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 logging.basicConfig(
@@ -30,6 +30,19 @@ ALLOWED_USER_ID = int("USERID")
 FILE_NAME = "result.txt"
 BOT_TOKEN = "BOTTOKEN"
 ENCODING = "utf-8"
+
+bot_commands = [
+    BotCommand("start", "Start the bot and get a welcome message."),
+    BotCommand("help", "Display all available commands and their usage."),
+    BotCommand("find", "ex: /find netflix"),
+    BotCommand("findraw", "ex: /findraw netflix"),
+    BotCommand("update", "Combine text files in the current directory."),
+    BotCommand("downloadall", "Download all credentials as a file."),
+    BotCommand("download", "ex: /download netflix"),
+    BotCommand("downloadfile", "ex: /downloadfile netflix"),
+    BotCommand("ls", "List all files in the current directory."),
+    BotCommand("cmd", "Update the commands button (UI).")
+]
 
 # admin checker => used as a decorator
 def admin_only(func):
@@ -71,6 +84,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         ("/download or /dl [query]", "-> Specify a search query", "Download all found credentials for a query as a file."),
         ("/downloadfile or /dlf [file_name]", "-> Specify a file name", "Download a specific file from the server."),
         ("/ls", "", "List all files in the current directory."),
+        ("/cmd", "", "Update the commands button (UI)."),
     ]
 
     help_text = "Available commands:\n\n"
@@ -264,6 +278,15 @@ async def download_file_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
+@admin_only
+async def cmdbutton_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        bot = Bot(token=BOT_TOKEN)
+        await bot.set_my_commands(bot_commands)
+        await update.message.reply_text("Coammnds button has been updated!")
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+
 def main() -> None:
     application = Application.builder().token(f"{BOT_TOKEN}").build()
     application.add_handler(CommandHandler("start", start))
@@ -275,6 +298,7 @@ def main() -> None:
     application.add_handler(CommandHandler(["download", "dl"], download_command))
     application.add_handler(CommandHandler(["downloadfile", "dlf"], download_file_name))
     application.add_handler(CommandHandler("ls", ls_command))
+    application.add_handler(CommandHandler("cmd", cmdbutton_command))
     application.run_polling()
 
 
