@@ -52,7 +52,7 @@ def admin_only(func):
         if user.id == ALLOWED_USER_ID:
             return await func(update, context)
         else:
-            await update.message.reply_text("You are not authorized to use this command.")
+            await update.message.reply_text("You are not authorized to use this command.", reply_to_message_id=update.message.message_id)
     return wrapper
 
 # arguments checker => used as a decorator
@@ -61,7 +61,7 @@ def argument_required(func):
     async def wrapper(update: Update, context: CallbackContext):
         query = ' '.join(update.message.text.split()[1:])
         if not query or '\n' in query:
-            await update.message.reply_text("Please provide the correct argument, use /help for more info")
+            await update.message.reply_text("Please provide the correct argument, use /help for more info", reply_to_message_id=update.message.message_id)
         else:
             return await func(update, context)
     return wrapper
@@ -91,7 +91,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     for command, arguments, usage in command_list:
         help_text += f"{command} {arguments}\n{usage}\n\n"
 
-    await update.message.reply_text(help_text)
+    await update.message.reply_text(help_text, reply_to_message_id=update.message.message_id)
 
 @admin_only
 @argument_required
@@ -118,11 +118,11 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             formatted_response = "\n".join(response)
             accounts_count = formatted_response.count("Username")
             message = f"Found {query.capitalize()} accounts [{accounts_count}]:\n{formatted_response}"
-            await update.message.reply_text(message)
+            await update.message.reply_text(message, reply_to_message_id=update.message.message_id)
         else:
-            await update.message.reply_text("No credentials found.")
+            await update.message.reply_text("No credentials found.",reply_to_message_id=update.message.message_id)
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(f"Error: {e}",reply_to_message_id=update.message.message_id)
 
 @admin_only
 @argument_required
@@ -148,11 +148,11 @@ async def search_command_raw(update: Update, context: ContextTypes.DEFAULT_TYPE)
             formatted_response = "\n".join(response)
             accounts_count = formatted_response.count("\n") + 1
             message = f"Found {query.capitalize()} accounts [{accounts_count}]:\n{formatted_response}"
-            await update.message.reply_text(message)
+            await update.message.reply_text(message, reply_to_message_id=update.message.message_id)
         else:
-            await update.message.reply_text("No credentials found.")
+            await update.message.reply_text("No credentials found.", reply_to_message_id=update.message.message_id)
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 
 @admin_only
 async def update_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -170,12 +170,12 @@ async def update_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             with open(f'{FILE_NAME}', 'w', encoding=f"{ENCODING}") as f:
                 for line in combined_lines:
                     f.write(line + '\n')
-            await update.message.reply_text("All text files are combined or updated successfully.")
+            await update.message.reply_text("All text files are combined or updated successfully.",reply_to_message_id=update.message.message_id)
         else:
-            await update.message.reply_text("All text files are empty.")
+            await update.message.reply_text("All text files are empty.",reply_to_message_id=update.message.message_id)
 
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(f"Error: {e}",reply_to_message_id=update.message.message_id)
 
 @admin_only
 async def downloadall_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -187,10 +187,11 @@ async def downloadall_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                 chat_id=update.effective_chat.id,
                 document=InputFile(file),
                 filename=f"{FILE_NAME}",
-                caption="Download all crediantials."
+                caption="Download all crediantials.",
+                reply_to_message_id=update.message.message_id
             )
     except Exception as e:
-        update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 
 @admin_only
 @argument_required
@@ -223,7 +224,8 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     chat_id=update.effective_chat.id,
                     document=InputFile(file),
                     filename=f"{FILE_NAME}",
-                    caption=f"Download all found credentials for {query.capitalize()}"
+                    caption=f"Download all found credentials for {query.capitalize()}",
+                    reply_to_message_id=update.message.message_id
                 )
 
             cached_file_name = os.path.splitext(file_path)[0]
@@ -241,11 +243,11 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     else:
                         raise
             else:
-                await update.message.reply_text("Failed to rename the file due to it still being used.")
+                await update.message.reply_text("Failed to rename the file due to it still being used.",reply_to_message_id=update.message.message_id)
         else:
-            await update.message.reply_text("No credentials found.")
+            await update.message.reply_text("No credentials found.",reply_to_message_id=update.message.message_id)
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(f"Error: {e}",reply_to_message_id=update.message.message_id)
 
 @admin_only
 async def ls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -253,9 +255,9 @@ async def ls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         file_list = os.listdir()
         file_list_formatted = '\n'.join(file_list)
-        await update.message.reply_text(f"Files in current directory:\n{file_list_formatted}")
+        await update.message.reply_text(f"Files in current directory:\n{file_list_formatted}",reply_to_message_id=update.message.message_id)
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(f"Error: {e}",reply_to_message_id=update.message.message_id)
 
 @admin_only
 @argument_required
@@ -271,21 +273,22 @@ async def download_file_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     chat_id=update.effective_chat.id,
                     document=InputFile(file),
                     filename=os.path.basename(file_path),
-                    caption=f"Download file {query} from server"
+                    caption=f"Download file {query} from server",
+                    reply_to_message_id=update.message.message_id
                 )
         else:
-            await update.message.reply_text("File not found, use /ls to see all files.")
+            await update.message.reply_text("File not found, use /ls to see all files.",reply_to_message_id=update.message.message_id)
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(f"Error: {e}",reply_to_message_id=update.message.message_id)
 
 @admin_only
 async def cmdbutton_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         bot = Bot(token=BOT_TOKEN)
         await bot.set_my_commands(bot_commands)
-        await update.message.reply_text("Coammnds button has been updated!")
+        await update.message.reply_text("Coammnds button has been updated!",reply_to_message_id=update.message.message_id)
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(f"Error: {e}",reply_to_message_id=update.message.message_id)
 
 def main() -> None:
     application = Application.builder().token(f"{BOT_TOKEN}").build()
