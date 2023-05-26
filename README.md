@@ -1,5 +1,5 @@
 # AccountManagerBot
-Telegram bot that managers account and more
+Telegram bot that manage accounts and more
 
 # Usage:
 * ```pip install -r .\requirements.txt```
