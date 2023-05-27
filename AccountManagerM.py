@@ -107,7 +107,7 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         filename = f"{query}.txt"
 
         if not os.path.isfile(filename):
-            await update.message.reply_text(f"File {filename} does not exist. Use `/dl {query}.txt` to generate the txt file first.", reply_to_message_id=update.message.message_id)
+            await update.message.reply_text(f"File {filename} does not exist. Use `/dl {query}` to generate the txt file first.", reply_to_message_id=update.message.message_id)
             return
 
         await update.message.reply_text(f"Search is being processed, please wait...")
@@ -163,7 +163,7 @@ async def search_command_raw(update: Update, context: ContextTypes.DEFAULT_TYPE)
         filename = f"{query}.txt"
 
         if not os.path.isfile(filename):
-            await update.message.reply_text(f"File {filename} does not exist. Use `/dl {query}.txt` to generate the txt file first.", reply_to_message_id=update.message.message_id)
+            await update.message.reply_text(f"File {filename} does not exist. Use `/dl {query}` to generate the txt file first.", reply_to_message_id=update.message.message_id)
             return
 
         await update.message.reply_text(f"Search is being processed, please wait...")
