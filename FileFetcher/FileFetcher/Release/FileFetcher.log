@@ -1,0 +1,8 @@
+﻿  FileFetcher.cpp
+  Unknown compiler version - please run the configure tests and report the results
+  Generating code
+  117 of 390 functions (30.0%) were compiled, the rest were copied from previous compilation.
+    39 functions were new in current compilation
+    26 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  FileFetcher.vcxproj -> C:\Users\Administrator\source\repos\FileFetcher\Release\FileFetcher.exe

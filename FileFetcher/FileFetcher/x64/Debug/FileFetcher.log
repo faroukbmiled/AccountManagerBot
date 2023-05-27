@@ -1,0 +1,2 @@
+﻿  FileFetcher.cpp
+C:\Users\Administrator\vcpkg\packages\boost-filesystem_x86-windows\include\boost\filesystem\config.hpp(19,10): fatal  error C1083: Cannot open include file: 'boost/config.hpp': No such file or directory
