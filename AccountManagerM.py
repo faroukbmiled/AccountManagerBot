@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 ALLOWED_USER_ID = int("USERID")
-BOT_TOKEN = "BOTOKEN"
+BOT_TOKEN = "BOTTOKEN"
 ENCODING = "utf-8"
 
 bot_commands = [
@@ -231,24 +231,30 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 if os.path.exists(output_filename):
                     with open(output_filename, 'rb') as file:
                         await update.message.reply_text(f"{output}")
-                        await context.bot.send_document(
-                            chat_id=update.effective_chat.id,
-                            document=file,
-                            filename=output_filename,
-                            caption=f"Download all found credentials for {query.capitalize()}",
-                            reply_to_message_id=update.message.message_id
-                        )
+                        if os.path.getsize(output_filename) > 0:
+                            await context.bot.send_document(
+                                chat_id=update.effective_chat.id,
+                                document=file,
+                                filename=output_filename,
+                                caption=f"Download all found credentials for {query.capitalize()}",
+                                reply_to_message_id=update.message.message_id
+                            )
+                        else:
+                            await update.message.reply_text("File is empty. No credentials found.", reply_to_message_id=update.message.message_id)
+                            os.remove(f"{query}.txt")
+                else:
+                    await update.message.reply_text("No credentials found.", reply_to_message_id=update.message.message_id)
             elif error:
                 await update.message.reply_text(f"Error: {error}", reply_to_message_id=update.message.message_id)
-
             else:
-                await update.message.reply_text("No credentials found.", reply_to_message_id=update.message.message_id)
+                await update.message.reply_text("No output received.", reply_to_message_id=update.message.message_id)
 
         except Exception as e:
             await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 
     except Exception as e:
         await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
+
 
 @admin_only
 async def ls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
