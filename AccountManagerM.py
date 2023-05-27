@@ -232,6 +232,7 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     with open(output_filename, 'rb') as file:
                         await update.message.reply_text(f"{output}")
                         if os.path.getsize(output_filename) > 0:
+                            await update.message.reply_text("Uploading in progress...")
                             await context.bot.send_document(
                                 chat_id=update.effective_chat.id,
                                 document=file,
