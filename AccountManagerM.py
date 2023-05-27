@@ -241,7 +241,6 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                             )
                         else:
                             await update.message.reply_text("File is empty. No credentials found.", reply_to_message_id=update.message.message_id)
-                            os.remove(f"{query}.txt")
                 else:
                     await update.message.reply_text("No credentials found.", reply_to_message_id=update.message.message_id)
             elif error:
