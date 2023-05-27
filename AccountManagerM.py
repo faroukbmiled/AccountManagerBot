@@ -6,6 +6,7 @@ from functools import wraps
 from telegram.ext import CallbackContext
 from threading import Thread
 import codecs
+import subprocess
 from telegram import __version__ as TG_VER
 from io import BytesIO
 import time
@@ -29,8 +30,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ALLOWED_USER_ID = int("userid")
-BOT_TOKEN = "bottoken"
+ALLOWED_USER_ID = int("USERID")
+BOT_TOKEN = "BOTOKEN"
 ENCODING = "utf-8"
 
 bot_commands = [
@@ -98,27 +99,51 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Process the search command."""
     try:
-        query = ' '.join(update.message.text.split()[1:])
-        await update.message.reply_text(f"This may take a while, please wait...")
+        query, *args = update.message.text.split()[1:]
+        if len(args) > 0:
+            num_lines = int(args[0])
+        else:
+            num_lines = 20
+        filename = f"{query}.txt"
+
+        if not os.path.isfile(filename):
+            await update.message.reply_text(f"File {filename} does not exist. Use `/dl {query}.txt` to generate the txt file first.", reply_to_message_id=update.message.message_id)
+            return
+
+        await update.message.reply_text(f"Search is being processed, please wait...")
 
         response = []
-        for filename in os.listdir():
-            if filename.endswith(".txt"):
-                with codecs.open(filename, 'r', encoding='utf-8', errors='ignore') as file_handle:
-                    for line in file_handle:
-                        line = line.strip()
-                        parts = line.split(":")
-                        if len(parts) >= 4 and query in parts[1]:
-                            resultfound = True
-                            username = parts[2].strip() if len(parts) > 2 and parts[2].strip() != "" else "index has no username"
-                            password = parts[3].strip() if len(parts) > 3 else "index has no password"
-                            response.append(f"\nUsername: {username}\nPassword: {password}")
+        resultfound = False
+        lines_processed = 0
+
+        with codecs.open(filename, 'r', encoding=ENCODING, errors='ignore') as file_handle:
+            for line in file_handle:
+                line = line.strip()
+                parts = line.split(":")
+                if len(parts) >= 4 and query in parts[1]:
+                    resultfound = True
+                    username = parts[2].strip() if len(parts) > 2 and parts[2].strip() != "" else "index has no username"
+                    password = parts[3].strip() if len(parts) > 3 else "index has no password"
+                    response.append(f"\nUsername: {username}\nPassword: {password}")
+
+                    lines_processed += 1
+                    if lines_processed == num_lines:
+                        break
+
+                    if len(response) == 20:
+                        formatted_response = "\n".join(response)
+                        accounts_count = formatted_response.count("Username")
+                        message = f"Found {query.capitalize()} accounts [{accounts_count}]:\n{formatted_response}"
+                        await update.message.reply_text(message, reply_to_message_id=update.message.message_id)
+
+                        response = []
 
         if resultfound:
-            formatted_response = "\n".join(response)
-            accounts_count = formatted_response.count("Username")
-            message = f"Found {query.capitalize()} accounts [{accounts_count}]:\n{formatted_response}"
-            await update.message.reply_text(message, reply_to_message_id=update.message.message_id)
+            if len(response) > 0:
+                formatted_response = "\n".join(response)
+                accounts_count = formatted_response.count("Username")
+                message = f"Found {query.capitalize()} accounts [{accounts_count}]:\n{formatted_response}"
+                await update.message.reply_text(message, reply_to_message_id=update.message.message_id)
         else:
             await update.message.reply_text("No credentials found.", reply_to_message_id=update.message.message_id)
     except Exception as e:
@@ -130,26 +155,50 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def search_command_raw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Process the search command."""
     try:
-        query = ' '.join(update.message.text.split()[1:])
-        await update.message.reply_text(f"This may take a while, please wait...")
+        query, *args = update.message.text.split()[1:]
+        if len(args) > 0:
+            num_lines = int(args[0])
+        else:
+            num_lines = 20
+        filename = f"{query}.txt"
+
+        if not os.path.isfile(filename):
+            await update.message.reply_text(f"File {filename} does not exist. Use `/dl {query}.txt` to generate the txt file first.", reply_to_message_id=update.message.message_id)
+            return
+
+        await update.message.reply_text(f"Search is being processed, please wait...")
 
         response = []
-        for filename in os.listdir():
-            if filename.endswith(".txt"):
-                with codecs.open(filename, 'r', encoding='utf-8', errors='ignore') as file_handle:
-                    for line in file_handle:
-                        line = line.strip()
-                        parts = line.split(":")
-                        if len(parts) >= 4 and query in parts[1]:
-                            resultfound = True
-                            username_password = ":".join(parts[2:4])
-                            response.append(username_password)
+        resultfound = False
+        lines_processed = 0
+
+        with codecs.open(filename, 'r', encoding=ENCODING, errors='ignore') as file_handle:
+            for line in file_handle:
+                line = line.strip()
+                parts = line.split(":")
+                if len(parts) >= 4 and query in parts[1]:
+                    resultfound = True
+                    username_password = ":".join(parts[2:4])
+                    response.append(username_password)
+
+                    lines_processed += 1
+                    if lines_processed == num_lines:
+                        break
+
+                    if len(response) == 20:
+                        formatted_response = "\n".join(response)
+                        accounts_count = formatted_response.count("\n") + 1
+                        message = f"Found {query.capitalize()} accounts [{accounts_count}]:\n{formatted_response}"
+                        await update.message.reply_text(message, reply_to_message_id=update.message.message_id)
+
+                        response = []
 
         if resultfound:
-            formatted_response = "\n".join(response)
-            accounts_count = formatted_response.count("\n") + 1
-            message = f"Found {query.capitalize()} accounts [{accounts_count}]:\n{formatted_response}"
-            await update.message.reply_text(message, reply_to_message_id=update.message.message_id)
+            if len(response) > 0:
+                formatted_response = "\n".join(response)
+                accounts_count = formatted_response.count("\n") + 1
+                message = f"Found {query.capitalize()} accounts [{accounts_count}]:\n{formatted_response}"
+                await update.message.reply_text(message, reply_to_message_id=update.message.message_id)
         else:
             await update.message.reply_text("No credentials found.", reply_to_message_id=update.message.message_id)
     except Exception as e:
@@ -167,49 +216,36 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         except:
             pass
 
-        resultfound = False
-        response = []
+        program_path = 'FileFetcher.exe'
+        arguments = [program_path, query]
 
-        def process_file(filepath):
-            nonlocal resultfound, response
+        try:
+            process = subprocess.Popen(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            output, error = process.communicate()
 
-            with codecs.open(filepath, 'r', encoding='utf-8', errors='ignore') as file_handle:
-                for line in file_handle:
-                    line = line.strip()
-                    parts = line.split(":")
-                    if len(parts) >= 4 and query in parts[1]:
-                        resultfound = True
-                        response.append(line)
+            output = output.decode()
+            error = error.decode()
 
-        file_paths = [os.path.join(".", filename) for filename in os.listdir(".") if filename.endswith(".txt")]
+            output_filename = f"{query}.txt"
+            if output:
+                if os.path.exists(output_filename):
+                    with open(output_filename, 'rb') as file:
+                        await update.message.reply_text(f"{output}")
+                        await context.bot.send_document(
+                            chat_id=update.effective_chat.id,
+                            document=file,
+                            filename=output_filename,
+                            caption=f"Download all found credentials for {query.capitalize()}",
+                            reply_to_message_id=update.message.message_id
+                        )
+            elif error:
+                await update.message.reply_text(f"Error: {error}", reply_to_message_id=update.message.message_id)
 
-        threads = []
-        for filepath in file_paths:
-            thread = Thread(target=process_file, args=(filepath,))
-            thread.start()
-            threads.append(thread)
+            else:
+                await update.message.reply_text("No credentials found.", reply_to_message_id=update.message.message_id)
 
-        for thread in threads:
-            thread.join()
-
-        if resultfound:
-            formatted_response = "\n".join(response)
-            output_file = BytesIO()
-            output_file.write(formatted_response.encode())
-            output_file.seek(0)
-            await context.bot.send_document(
-                chat_id=update.effective_chat.id,
-                document=InputFile(output_file, filename=f"{query}.txt"),
-                caption=f"Download all found credentials for {query.capitalize()}",
-                reply_to_message_id=update.message.message_id
-            )
-
-            with open(f"{query}.txt", 'w', encoding='utf-8') as output_file:
-                output_file.write(formatted_response)
-
-            await update.message.reply_text(f"{query}.txt was saved to server!")
-        else:
-            await update.message.reply_text("No credentials found.", reply_to_message_id=update.message.message_id)
+        except Exception as e:
+            await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 
     except Exception as e:
         await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
