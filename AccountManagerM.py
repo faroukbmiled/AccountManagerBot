@@ -10,6 +10,9 @@ import subprocess
 from telegram import __version__ as TG_VER
 from io import BytesIO
 import time
+from telegram import ReplyKeyboardRemove
+
+
 
 try:
     from telegram import __version_info__
@@ -43,6 +46,7 @@ bot_commands = [
     BotCommand("downloadfile", "ex: /downloadfile netflix"),
     BotCommand("ls", "List all files in the current directory."),
     BotCommand("remove", "ex: /remove netflix.txt"),
+    BotCommand("rename", "ex: /rename netflix.txt, /rn all"),
     BotCommand("cmd", "Update the commands button (UI).")
 ]
 
@@ -85,6 +89,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         ("/downloadfile or /dlf [file_name]", "-> Specify a file name", "Download a specific file from the server."),
         ("/ls", "", "List all files in the current directory."),
         ("/rm or /remove [query]", "-> Specify a file name", "delete a specific file names [query]."),
+        ("/rn or /rename [query] or all", "-> Specify a file name", "rename a specific file names [query], or all files."),
         ("/cmd", "", "Update the commands button (UI)."),
     ]
 
@@ -305,11 +310,59 @@ async def delete_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 
 @admin_only
+@argument_required
+async def rename_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Process the rename command to rename all/ a specific file(s)."""
+    try:
+        query, *args = update.message.text.split()[1:]
+        try:
+            arg1 = args[0]
+        except IndexError:
+            arg1 = None
+        if query == "all" and arg1 is None:
+            count = 1
+            for file_name in os.listdir("."):
+                if file_name.endswith(".txt"):
+                    new_file_name = f"combo{count}.txt"
+                    while os.path.exists(new_file_name):
+                        count += 1
+                        new_file_name = f"combo{count}.txt"
+                    os.rename(file_name, new_file_name)
+                    count += 1
+            await update.message.reply_text("All txt files have been renamed combo#.txt",reply_to_message_id=update.message.message_id)
+        if query == "all" and arg1 is not None:
+            count = 1
+            for file_name in os.listdir():
+                if file_name.endswith(".txt"):
+                    new_file_name = f"{arg1}{count}.txt"
+                    while os.path.exists(new_file_name):
+                        count += 1
+                        new_file_name = f"{arg1}{count}.txt"
+                    os.rename(file_name, new_file_name)
+                    count += 1
+            await update.message.reply_text(f"All txt files have been renamed {arg1}#.txt", reply_to_message_id=update.message.message_id)
+        elif arg1 is not None:
+            if os.path.exists(query):
+                new_file_name = f"{arg1}"
+                os.rename(query, new_file_name)
+                await update.message.reply_text(f"{query} just got renamed to {arg1}", reply_to_message_id=update.message.message_id)
+            else:
+                await update.message.reply_text(f"Error: {query} doesn't exist.", reply_to_message_id=update.message.message_id)
+        elif query != "all" and arg1 is None:
+            await update.message.reply_text(f"Unknown argument or invalid file name, use /help.", reply_to_message_id=update.message.message_id)
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
+
+@admin_only
 async def cmdbutton_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        bot = Bot(token=BOT_TOKEN)
-        await bot.set_my_commands(bot_commands)
-        await update.message.reply_text("Coammnds button has been updated!",reply_to_message_id=update.message.message_id)
+        if ' '.join(update.message.text.split()[1:]) == "kb":
+            reply_markup = ReplyKeyboardRemove()
+            await update.message.reply_text('Custom button hidden.', reply_markup=reply_markup)
+        else:
+            bot = Bot(token=BOT_TOKEN)
+            await bot.set_my_commands(bot_commands)
+            await update.message.reply_text("Coammnds button has been updated!",reply_to_message_id=update.message.message_id)
     except Exception as e:
         await update.message.reply_text(f"Error: {e}",reply_to_message_id=update.message.message_id)
 
@@ -322,6 +375,7 @@ def main() -> None:
     application.add_handler(CommandHandler(["download", "dl"], download_command))
     application.add_handler(CommandHandler(["downloadfile", "dlf"], download_file_name))
     application.add_handler(CommandHandler(["remove", "rm"], delete_file))
+    application.add_handler(CommandHandler(["rename", "rn"], rename_file))
     application.add_handler(CommandHandler("ls", ls_command))
     application.add_handler(CommandHandler("cmd", cmdbutton_command))
     application.run_polling()
