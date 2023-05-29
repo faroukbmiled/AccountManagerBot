@@ -6,6 +6,7 @@ from functools import wraps
 from telegram.ext import CallbackContext
 from threading import Thread
 import codecs
+import random
 import subprocess
 from telegram import __version__ as TG_VER
 from io import BytesIO
@@ -122,7 +123,10 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         lines_processed = 0
 
         with codecs.open(filename, 'r', encoding=ENCODING, errors='ignore') as file_handle:
-            for line in file_handle:
+            lines = file_handle.readlines()
+            random.shuffle(lines)
+
+            for line in lines:
                 line = line.strip()
                 parts = line.split(":")
                 if len(parts) >= 4 and query in parts[1]:
@@ -178,7 +182,10 @@ async def search_command_raw(update: Update, context: ContextTypes.DEFAULT_TYPE)
         lines_processed = 0
 
         with codecs.open(filename, 'r', encoding=ENCODING, errors='ignore') as file_handle:
-            for line in file_handle:
+            lines = file_handle.readlines()
+            random.shuffle(lines)
+
+            for line in lines:
                 line = line.strip()
                 parts = line.split(":")
                 if len(parts) >= 4 and query in parts[1]:
