@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Telegram bot by AX_Ryuk"""
+from ast import Str
 import logging
 import os
 from functools import wraps
@@ -10,7 +11,8 @@ import random
 import subprocess
 from telegram import __version__ as TG_VER
 from io import BytesIO
-import time
+import secrets
+import string
 from telegram import ReplyKeyboardRemove
 
 
@@ -48,6 +50,8 @@ bot_commands = [
     BotCommand("ls", "List all files in the current directory."),
     BotCommand("remove", "ex: /remove netflix.txt"),
     BotCommand("rename", "ex: /rename netflix.txt, /rn all"),
+    BotCommand("password", "ex: /password, /pass 50"),
+    BotCommand("execute", "ex: /exec mv filename, /exec ls"),
     BotCommand("cmd", "Update the commands button (UI).")
 ]
 
@@ -89,8 +93,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         ("/download or /dl [query]", "-> Specify a search query", "Download all found credentials for a query as a file."),
         ("/downloadfile or /dlf [file_name]", "-> Specify a file name", "Download a specific file from the server."),
         ("/ls", "", "List all files in the current directory."),
-        ("/rm or /remove [query]", "-> Specify a file name", "delete a specific file names [query]."),
-        ("/rn or /rename [query] or all", "-> Specify a file name", "rename a specific file names [query], or all files."),
+        ("/rm or /remove [file_name]", "-> Specify a file name", "delete a specific file names [query]."),
+        ("/rn or /rename [file_name new_name] or [all|all name]", "-> Specify a file name", "rename a specific file names [query], or all files."),
+        ("/execute or /exec [command]", "-> Specify system command", "Executes system [command]."),
+        ("/password or /pass [length|default(10)] (-s) for no special charachters", "-> Specify pass length", "generates a random password."),
         ("/cmd", "", "Update the commands button (UI)."),
     ]
 
@@ -360,6 +366,17 @@ async def rename_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     except Exception as e:
         await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 
+@argument_required
+@admin_only
+async def execute_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Execute a system command."""
+    command = ' '.join(update.message.text.split()[1:])
+    try:
+        output = subprocess.check_output(command, shell=True)
+        await update.message.reply_text(output.decode(), reply_to_message_id=update.message.message_id)
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
+
 @admin_only
 async def cmdbutton_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
@@ -373,6 +390,38 @@ async def cmdbutton_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     except Exception as e:
         await update.message.reply_text(f"Error: {e}",reply_to_message_id=update.message.message_id)
 
+async def generate_password_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Generate a random password."""
+    length = 10
+    include_special_chars = True
+
+    try:
+        first_arg, *args = update.message.text.split()[1:]
+        second_arg = args[0]
+        if "-s" in first_arg and second_arg:
+            include_special_chars = False
+            length = int(second_arg)
+        elif "-s" in second_arg:
+            include_special_chars = False
+            length = int(first_arg)
+
+    except IndexError:
+        first_arg, *args = update.message.text.split()[1:]
+        second_arg = None
+        if "-s" in first_arg:
+            include_special_chars = False
+        else:
+            length = int(first_arg)
+
+    if include_special_chars:
+        characters = string.ascii_letters + string.digits + string.punctuation
+    else:
+        characters = string.ascii_letters + string.digits
+
+    password = ''.join(secrets.choice(characters) for _ in range(int(length)))
+
+    await update.message.reply_text(f"{password}", reply_to_message_id=update.message.message_id)
+
 def main() -> None:
     application = Application.builder().token(f"{BOT_TOKEN}").build()
     application.add_handler(CommandHandler("start", start))
@@ -383,6 +432,8 @@ def main() -> None:
     application.add_handler(CommandHandler(["downloadfile", "dlf"], download_file_name))
     application.add_handler(CommandHandler(["remove", "rm"], delete_file))
     application.add_handler(CommandHandler(["rename", "rn"], rename_file))
+    application.add_handler(CommandHandler(["execute", "exec"], execute_command))
+    application.add_handler(CommandHandler(["password", "pass"], generate_password_command))
     application.add_handler(CommandHandler("ls", ls_command))
     application.add_handler(CommandHandler("cmd", cmdbutton_command))
     application.run_polling()
