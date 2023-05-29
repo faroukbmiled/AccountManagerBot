@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Telegram bot by AX_Ryuk"""
-from ast import Str
 import logging
 import os
 from functools import wraps
