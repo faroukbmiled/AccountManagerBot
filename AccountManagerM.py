@@ -2,6 +2,7 @@
 """Telegram bot by AX_Ryuk"""
 import logging
 import os
+import sys
 from functools import wraps
 import codecs
 import random
@@ -234,6 +235,9 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             pass
 
         program_path = 'FileFetcher.exe'
+        if 'linux' in sys.platform:
+            program_path = './FileFetcher'
+
         arguments = [program_path, query]
 
         try:
@@ -365,8 +369,8 @@ async def rename_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     except Exception as e:
         await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 
-@argument_required
 @admin_only
+@argument_required
 async def execute_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Process the execute command to execute a system command."""
     try:
@@ -443,9 +447,9 @@ def main() -> None:
     application.add_handler(CommandHandler(["rename", "rn"], rename_file))
     application.add_handler(CommandHandler(["execute", "exec"], execute_command))
     application.add_handler(CommandHandler(["password", "pass"], generate_password_command))
+    application.add_handler(CommandHandler("cmd", cmdbutton_command))
     application.add_handler(CommandHandler("ls", ls_command))
     application.add_handler(MessageHandler(None, unknown_command))
-    application.add_handler(CommandHandler("cmd", cmdbutton_command))
     application.run_polling()
 
 
