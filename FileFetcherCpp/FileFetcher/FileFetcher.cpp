@@ -6,7 +6,6 @@
 #include <boost/filesystem.hpp>
 #include <mutex>
 #include <atomic>
-#include <unordered_set>
 #include <future>
 
 namespace fs = boost::filesystem;
