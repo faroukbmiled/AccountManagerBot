@@ -13,7 +13,7 @@ namespace fs = boost::filesystem;
 std::mutex outputMutex;
 std::atomic<int> logFileCounter(0);
 
-void processFile(const std::string& filePath, const std::string& keyword) {
+void processFile(const std::string& filePath, const std::string& keyword, const std::string& folder) {
     std::ifstream inputFile(filePath);
 
     if (!inputFile) {
@@ -21,7 +21,7 @@ void processFile(const std::string& filePath, const std::string& keyword) {
         return;
     }
 
-    std::string logFileName = "log" + std::to_string(++logFileCounter) + ".txt";
+    std::string logFileName = folder + "/log" + std::to_string(++logFileCounter) + ".txt";
     std::ofstream logFile(logFileName, std::ios_base::app);
 
     if (!logFile) {
@@ -42,11 +42,11 @@ void processFile(const std::string& filePath, const std::string& keyword) {
     logFile.close();
 }
 
-void combineLogFiles(const std::string& keyword) {
-    std::ofstream outputFile(keyword + ".txt", std::ios_base::app);
+void combineLogFiles(const std::string& keyword, const std::string& folder) {
+    std::ofstream outputFile(folder + "/" + keyword + ".txt", std::ios_base::app);
 
     for (int i = 1; i <= logFileCounter; ++i) {
-        std::string logFileName = "log" + std::to_string(i) + ".txt";
+        std::string logFileName = folder + "/log" + std::to_string(i) + ".txt";
         std::ifstream logFile(logFileName);
 
         if (!logFile) {
@@ -114,14 +114,15 @@ int main(int argc, char* argv[]) {
     }
 
     std::string keyword = argv[1];
-    std::string outputFileName = keyword + ".txt";
+    std::string folder_name = argv[2];
+    std::string outputFileName = folder_name + "/" + keyword + ".txt";
 
     std::vector<std::thread> threads;
 
     fs::directory_iterator end;
-    for (fs::directory_iterator file(fs::current_path()); file != end; ++file) {
+    for (fs::directory_iterator file(folder_name); file != end; ++file) {
         if (fs::is_regular_file(file->status()) && file->path().extension() == ".txt") {
-            threads.emplace_back(std::thread(processFile, file->path().string(), keyword));
+            threads.emplace_back(std::thread(processFile, file->path().string(), keyword, folder_name));
         }
     }
 
@@ -129,11 +130,11 @@ int main(int argc, char* argv[]) {
         thread.join();
     }
 
-    combineLogFiles(keyword);
+    combineLogFiles(keyword, folder_name);
 
     removeDuplicatesParallel(outputFileName);
 
-    std::cout << "Processing complete. Files have been combined into " << keyword << ".txt\n";
+    std::cout << "Processing complete. File name => " << outputFileName << '\n';
 
     return 0;
 }
