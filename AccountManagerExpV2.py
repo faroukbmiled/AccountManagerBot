@@ -578,7 +578,7 @@ async def get_attachments(update: Update, context: CallbackContext) -> None:
             stderr=subprocess.PIPE,
             universal_newlines=True
         )
-        await update.message.reply_text(f'Spawning worker to download files from id "{args[0]}"')
+        await update.message.reply_text(f'Spawning worker to download files from id "{channel_id}"')
         message = await update.message.reply_text("Loading...", reply_to_message_id=update.message.message_id)
         current_output = ""
 
