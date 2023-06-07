@@ -14,7 +14,6 @@ import secrets
 import string
 import json
 
-
 try:
     from telegram import __version_info__
 except ImportError:
@@ -41,7 +40,7 @@ try:
 except FileNotFoundError:
     lines = [
         'api_id=\n',
-        'api_hash=\n',
+        'api_hash=n',
         'phone_number=\n',
         'password=\n'
     ]
@@ -55,8 +54,8 @@ IIFA_PASSWORD = lines[3].strip().split('=')[1]
 ALLOWED_USER_ID = int("")
 BOT_TOKEN = ""
 ENCODING = "utf-8"
-DEFAULT_CHANNEL_ID = idnumber
-CHANNEL_ID_FILE = ""
+DEFAULT_CHANNEL_ID =
+CHANNEL_ID_FILE = "channel_id"
 FOLDER_NAME = "worker"
 
 bot_commands = [
@@ -510,7 +509,8 @@ async def get_chats(update: Update, context: CallbackContext) -> None:
         if len(context.args) > 0:
             if context.args[0] == 'all':
                 async for dialog in dialog_iterator:
-                    chat_list += f"Title: {dialog.title} | ID: {dialog.id}\n"
+                    id_str = str(dialog.id).lstrip("-")
+                    chat_list += f"Title: {dialog.title} | ID: {id_str}\n"
                     line_counter += 1
                     if line_counter == LINE_COUNT_LIMIT:
                         await update.message.reply_text(chat_list)
@@ -528,10 +528,10 @@ async def get_chats(update: Update, context: CallbackContext) -> None:
                         search_id = None
 
                     async for dialog in dialog_iterator:
-                        title = dialog.title.lower()
+                        id_str = str(dialog.id).lstrip("-")
                         if (search_id and search_id == dialog.id) or \
-                            (search_query and (search_query in title or search_query in str(dialog.id))):
-                            chat_list += f"Title: {dialog.title} | ID: {dialog.id}\n"
+                                (search_query and (search_query in dialog.title.lower() or search_query in str(dialog.id))):
+                            chat_list += f"Title: {dialog.title} | ID: {id_str}\n"
                             line_counter += 1
                             chat_found = True
                             if line_counter == LINE_COUNT_LIMIT:
@@ -573,14 +573,15 @@ async def get_attachments(update: Update, context: CallbackContext) -> None:
         save_channel_id(channel_id)
 
         process = subprocess.Popen(
-            ["dotnet", "RyukDotnetBot.dll", str(channel_id), str(limit)],
+            ["dotnet", "RyukDotnetBot.dll", str(channel_id), str(limit), str(FOLDER_NAME)],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            universal_newlines=True
+            universal_newlines=True,
         )
         await update.message.reply_text(f'Spawning worker to download files from id "{channel_id}"')
         message = await update.message.reply_text("Loading...", reply_to_message_id=update.message.message_id)
         current_output = ""
+        shittysolution = 0 # to make sure edit_message_text finishes sending all outputs
 
         while True:
             output = process.stdout.readline().rstrip()
@@ -593,16 +594,22 @@ async def get_attachments(update: Update, context: CallbackContext) -> None:
                             text=output
                         )
                         current_output = output
+                        print(current_output)
                     except:
-                        time.sleep(5)
+                        await asyncio.sleep(5)
+                        continue
                     current_output = output
             if process.poll() is not None:
-                if process.returncode != 0:
-                    await update.message.reply_text(f"Error: {process.returncode}",
+                shittysolution += 1
+                if shittysolution == 5:
+                    if process.returncode != 0:
+                        await update.message.reply_text(f"Error: {process.returncode}",
                                                     reply_to_message_id=update.message.message_id)
+                    else:
+                        await update.message.reply_text(f'Done!')
+                    break
                 else:
-                    await update.message.reply_text(f'Done!')
-                break
+                    continue
     except Exception as e:
         await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 

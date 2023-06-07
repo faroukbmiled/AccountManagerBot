@@ -7,11 +7,85 @@
 #include <mutex>
 #include <atomic>
 #include <future>
+#include <thread>
+#include <queue>
 
 namespace fs = boost::filesystem;
 
 std::mutex outputMutex;
 std::atomic<int> logFileCounter(0);
+
+class ThreadPool {
+public:
+    ThreadPool(size_t numThreads) : stop(false) {
+        for (size_t i = 0; i < numThreads; ++i) {
+            threads.emplace_back([this]() {
+                while (true) {
+                    std::function<void()> task;
+
+                    {
+                        std::unique_lock<std::mutex> lock(queueMutex);
+                        condition.wait(lock, [this]() {
+                            return stop || !tasks.empty();
+                            });
+
+                        if (stop && tasks.empty()) {
+                            return;
+                        }
+
+                        task = std::move(tasks.front());
+                        tasks.pop();
+                    }
+
+                    task();
+                }
+                });
+        }
+    }
+
+    ~ThreadPool() {
+        {
+            std::unique_lock<std::mutex> lock(queueMutex);
+            stop = true;
+        }
+
+        condition.notify_all();
+
+        for (std::thread& thread : threads) {
+            thread.join();
+        }
+    }
+
+    template<class F, class... Args>
+    auto enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type> {
+        using return_type = typename std::result_of<F(Args...)>::type;
+
+        auto task = std::make_shared<std::packaged_task<return_type()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+
+        std::future<return_type> result = task->get_future();
+        {
+            std::unique_lock<std::mutex> lock(queueMutex);
+
+            if (stop) {
+                throw std::runtime_error("enqueue on stopped ThreadPool");
+            }
+
+            tasks.emplace([task]() {
+                (*task)();
+                });
+        }
+
+        condition.notify_one();
+        return result;
+    }
+
+private:
+    std::vector<std::thread> threads;
+    std::queue<std::function<void()>> tasks;
+    std::mutex queueMutex;
+    std::condition_variable condition;
+    bool stop;
+};
 
 void processFile(const std::string& filePath, const std::string& keyword, const std::string& folder) {
     std::ifstream inputFile(filePath);
@@ -20,7 +94,6 @@ void processFile(const std::string& filePath, const std::string& keyword, const 
         std::cerr << "Error opening input file: " << filePath << '\n';
         return;
     }
-
     std::string logFileName = folder + "/log" + std::to_string(++logFileCounter) + ".txt";
     std::ofstream logFile(logFileName, std::ios_base::app);
 
@@ -108,8 +181,8 @@ void removeDuplicatesParallel(const std::string& filePath) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cout << "Usage: program_name keyword\n";
+    if (argc < 3) {
+        std::cout << "Usage: program_name keyword folder\n";
         return 0;
     }
 
@@ -117,17 +190,20 @@ int main(int argc, char* argv[]) {
     std::string folder_name = argv[2];
     std::string outputFileName = folder_name + "/" + keyword + ".txt";
 
-    std::vector<std::thread> threads;
+    const size_t numThreads = std::thread::hardware_concurrency();
+    ThreadPool threadPool(numThreads);
+
+    std::vector<std::future<void>> results;
 
     fs::directory_iterator end;
     for (fs::directory_iterator file(folder_name); file != end; ++file) {
         if (fs::is_regular_file(file->status()) && file->path().extension() == ".txt") {
-            threads.emplace_back(std::thread(processFile, file->path().string(), keyword, folder_name));
+            results.emplace_back(threadPool.enqueue(processFile, file->path().string(), keyword, folder_name));
         }
     }
 
-    for (auto& thread : threads) {
-        thread.join();
+    for (auto& result : results) {
+        result.get();
     }
 
     combineLogFiles(keyword, folder_name);
