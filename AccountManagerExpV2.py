@@ -25,13 +25,12 @@ if __version_info__ < (20, 0, 0, "alpha", 1):
         f"{TG_VER} version of this Bot, "
         f"visit https://docs.python-telegram-bot.org/en/v{TG_VER}/examples.html"
     )
-from telegram import ReplyKeyboardRemove, Update, InputFile, BotCommand, Bot
+from telegram import ReplyKeyboardRemove, Update, InputFile, BotCommand, Bot, error
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, CallbackContext
 from telethon.sync import TelegramClient
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+logging.basicConfig(filename='ryukerr.log', level=logging.DEBUG,
+                    format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger = logging.getLogger(__name__)
 
 try:
@@ -40,8 +39,8 @@ try:
 except FileNotFoundError:
     lines = [
         'api_id=\n',
-        'api_hash=n',
-        'phone_number=\n',
+        'api_hash=\n',
+        'phone_number=+\n',
         'password=\n'
     ]
     with open('config.conf', 'w') as configfile:
@@ -90,6 +89,9 @@ def load_channel_id():
 
 # unknown command handler
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message.document:
+        await update.message.reply_text("Your file is ready!", reply_to_message_id=update.message.message_id)
+        return
     await update.message.reply_text("Sorry, I don't understand, use /help to check all commands", reply_to_message_id=update.message.message_id)
 
 # admin checker => used as a decorator
@@ -281,14 +283,20 @@ async def search_command_raw(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Process the download command."""
     try:
-        query = ' '.join(update.message.text.split()[1:])
+        NoUpload = None
+        args = context.args
+        if len(args) >=1:
+            query = args[0]
+        if len(args) >= 2:
+            NoUpload = args[1]
+
         if not os.path.exists(f"{FOLDER_NAME}"):
             os.makedirs(f"{FOLDER_NAME}")
-        else:
-            try:
-                os.remove(f"{FOLDER_NAME}/{query}.txt")
-            except:
-                pass
+        try:
+            os.remove(f"{FOLDER_NAME}/{query}.txt")
+        except:
+            pass
+
         await update.message.reply_text(f"This may take a while, please wait...")
 
         program_path = 'FileFetcher.exe'
@@ -305,19 +313,30 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             error = error.decode()
 
             output_filename = f"{query}.txt"
+            f_path = f"{FOLDER_NAME}/{output_filename}"
             if output:
-                if os.path.exists(f"{FOLDER_NAME}/{output_filename}"):
-                    with open(f"{FOLDER_NAME}/{output_filename}", 'rb') as file:
+                if os.path.exists(f_path):
+                    with open(f_path, 'rb') as file:
                         await update.message.reply_text(f"{output}")
-                        if os.path.getsize(f"{FOLDER_NAME}/{output_filename}") > 0:
-                            await update.message.reply_text("Uploading in progress...")
-                            await context.bot.send_document(
-                                chat_id=update.effective_chat.id,
-                                document=file,
-                                filename=output_filename,
-                                caption=f"Download all found credentials for {query.capitalize()}",
-                                reply_to_message_id=update.message.message_id
-                            )
+                        if os.path.getsize(f_path) > 0:
+                            if NoUpload == "-nu":
+                                await update.message.reply_text("File will not be uploaded.", reply_to_message_id=update.message.message_id)
+                            else:
+                                file_size = os.path.getsize(f_path)
+                                file_size_mb = file_size / (1024 * 1024)
+                                if file_size_mb > 50:
+                                    await update.message.reply_text("File is too large to upload, so telethon will be uploading it, please wait...", reply_to_message_id=update.message.message_id)
+                                    u_file = await client.upload_file(f_path)
+                                    await client.send_file(context.bot.id, u_file, force_document=True)
+                                else:
+                                    await update.message.reply_text("Uploading in progress...")
+                                    await context.bot.send_document(
+                                        chat_id=update.message.chat_id,
+                                        document=file,
+                                        filename=output_filename,
+                                        caption=f"Download all found credentials for {query.capitalize()}",
+                                        reply_to_message_id=update.message.message_id
+                                    )
                         else:
                             await update.message.reply_text("File is empty. No credentials found.", reply_to_message_id=update.message.message_id)
                 else:
@@ -332,7 +351,6 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     except Exception as e:
         await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
-
 
 @admin_only
 async def ls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -353,14 +371,21 @@ async def download_file_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
         file_path = f"{FOLDER_NAME}/{query}"
 
         if os.path.exists(file_path):
-            with open(file_path, 'rb') as file:
-                await context.bot.send_document(
-                    chat_id=update.effective_chat.id,
-                    document=InputFile(file),
-                    filename=os.path.basename(file_path),
-                    caption=f"Download file {query} from server",
-                    reply_to_message_id=update.message.message_id
-                )
+            file_size = os.path.getsize(file_path)
+            file_size_mb = file_size / (1024 * 1024)
+            if file_size_mb > 50:
+                await update.message.reply_text("File is too large to upload, so telethon will be uploading it, please wait...", reply_to_message_id=update.message.message_id)
+                u_file = await client.upload_file(file_path)
+                await client.send_file(context.bot.id, u_file, force_document=True)
+            else:
+                with open(file_path, 'rb') as file:
+                    await context.bot.send_document(
+                        chat_id=update.effective_chat.id,
+                        document=InputFile(file),
+                        filename=os.path.basename(file_path),
+                        caption=f"Download file {query} from server",
+                        reply_to_message_id=update.message.message_id
+                    )
         else:
             await update.message.reply_text("File not found, use /ls to see all files.",reply_to_message_id=update.message.message_id)
     except Exception as e:
@@ -581,7 +606,7 @@ async def get_attachments(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(f'Spawning worker to download files from id "{channel_id}"')
         message = await update.message.reply_text("Loading...", reply_to_message_id=update.message.message_id)
         current_output = ""
-        shittysolution = 0 # to make sure edit_message_text finishes sending all outputs
+        shittysolution = 0  # to make sure edit_message_text finishes sending all outputs
 
         while True:
             output = process.stdout.readline().rstrip()
@@ -594,17 +619,20 @@ async def get_attachments(update: Update, context: CallbackContext) -> None:
                             text=output
                         )
                         current_output = output
-                        print(current_output)
-                    except:
-                        await asyncio.sleep(5)
+                    except error.BadRequest as e:
+                        if message.message_id != update.message.message_id:
+                            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
+                        message = await update.message.reply_text(output, reply_to_message_id=update.message.message_id)
+                        current_output = output
+                    except Exception as e:
+                        logger.error(e)
                         continue
-                    current_output = output
             if process.poll() is not None:
                 shittysolution += 1
-                if shittysolution == 5:
+                if shittysolution == 10:
                     if process.returncode != 0:
                         await update.message.reply_text(f"Error: {process.returncode}",
-                                                    reply_to_message_id=update.message.message_id)
+                                                        reply_to_message_id=update.message.message_id)
                     else:
                         await update.message.reply_text(f'Done!')
                     break
