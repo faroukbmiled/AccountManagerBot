@@ -564,7 +564,7 @@ async def get_chats(update: Update, context: CallbackContext) -> None:
         if len(context.args) > 0:
             if context.args[0] == 'all':
                 async for dialog in dialog_iterator:
-                    id_str = str(dialog.id).lstrip("-")
+                    id_str = dialog.entity.id
                     chat_list += f"Title: {dialog.title} | ID: {id_str}\n"
                     line_counter += 1
                     if line_counter == LINE_COUNT_LIMIT:
@@ -583,7 +583,7 @@ async def get_chats(update: Update, context: CallbackContext) -> None:
                         search_id = None
 
                     async for dialog in dialog_iterator:
-                        id_str = str(dialog.id).lstrip("-")
+                        id_str = dialog.entity.id
                         if (search_id and search_id == dialog.id) or \
                                 (search_query and (search_query in dialog.title.lower() or search_query in str(dialog.id))):
                             chat_list += f"Title: {dialog.title} | ID: {id_str}\n"
@@ -608,9 +608,10 @@ async def get_chats(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 
+
 @admin_only
 async def get_attachments(update: Update, context: CallbackContext) -> None:
-    LOG_DELAY = 10 # Not seconds just iterations
+    LOG_DELAY = 25 # Not seconds just iterations
     try:
         args = context.args
         if len(args) == 1:
@@ -818,6 +819,6 @@ if __name__ == "__main__":
     print("Starting...")
     load_keywords()
     global is_handler_enabled
-    is_handler_enabled = False
+    is_handler_enabled = True
     CLIENT.start(PHONE_NUMBER, IIFA_PASSWORD)
     asyncio.run(Start_Bots())
