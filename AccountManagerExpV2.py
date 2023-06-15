@@ -9,10 +9,12 @@ from functools import wraps
 import codecs
 import random
 import subprocess
+from tracemalloc import stop
 from telegram import __version__ as TG_VER
 import secrets
 import string
 import json
+import psutil
 
 try:
     from telegram import __version_info__
@@ -25,13 +27,19 @@ if __version_info__ < (20, 0, 0, "alpha", 1):
         f"{TG_VER} version of this Bot, "
         f"visit https://docs.python-telegram-bot.org/en/v{TG_VER}/examples.html"
     )
-from telegram import ReplyKeyboardRemove, Update, InputFile, BotCommand, Bot, error
+from telegram import ReplyKeyboardRemove, Update, InputFile, BotCommand, Bot, error, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, CallbackContext
-from telethon.sync import TelegramClient
+from telethon.sync import TelegramClient, events, types
 
-logging.basicConfig(filename='ryukerr.log', level=logging.DEBUG,
-                    format='%(asctime)s %(levelname)s %(name)s %(message)s')
+# logging.basicConfig(filename='ryukerr.log', level=logging.DEBUG,
+#                     format='%(asctime)s %(levelname)s %(name)s %(message)s')
+# logger = logging.getLogger(__name__)
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 logger = logging.getLogger(__name__)
+CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 
 try:
     with open('config.conf', 'r') as configfile:
@@ -53,9 +61,15 @@ IIFA_PASSWORD = lines[3].strip().split('=')[1]
 ALLOWED_USER_ID = int("")
 BOT_TOKEN = ""
 ENCODING = "utf-8"
-DEFAULT_CHANNEL_ID =
+DEFAULT_CHANNEL_ID = 
 CHANNEL_ID_FILE = "channel_id"
-FOLDER_NAME = "worker"
+WORKERS_FOLDER = "worker"
+FOLDER_NAME = os.path.join(CURR_DIR, WORKERS_FOLDER)
+KEYWORDS = []
+KEYWORDS_FILE = "keywords.json"
+SESSION_NAME = "ryuk_sess"
+CLIENT = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+BOT = Bot(token=BOT_TOKEN)
 
 bot_commands = [
     BotCommand("start", "Start the bot and get a welcome message."),
@@ -71,8 +85,21 @@ bot_commands = [
     BotCommand("execute", "ex: /exec mv filename, /exec ls"),
     BotCommand("getatt", "ex: /getatt -923987905 2, /getatt 100"),
     BotCommand("getchats", "ex: /gc s group/chatname, /getchats all"),
+    BotCommand("keyword", "ex: /keyword add/remove example, /keyword show"),
     BotCommand("cmd", "Update the commands button (UI).")
 ]
+
+# load keywords from file (i cant be arsed to make the json funcs into one)
+def load_keywords():
+    global KEYWORDS
+    if os.path.exists(KEYWORDS_FILE):
+        with open(KEYWORDS_FILE, "r") as file:
+            KEYWORDS = json.load(file)
+
+# save keywords to file
+def save_keywords():
+    with open(KEYWORDS_FILE, "w") as file:
+        json.dump(KEYWORDS, file)
 
 # json saver
 def save_channel_id(channel_id):
@@ -89,6 +116,8 @@ def load_channel_id():
 
 # unknown command handler
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message.forward_from or update.message.forward_from_chat:
+        return
     if update.message.document:
         await update.message.reply_text("Your file is ready!", reply_to_message_id=update.message.message_id)
         return
@@ -143,6 +172,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         ("/execute or /exec [command]", "➡ Specify system command", "Execute a system command."),
         ("/getatt or /dla [channel_id and or limit]", "➡ Specify channel_id and or limit", "Downloads attachments from desired chat id."),
         ("/getchats or /gc [all or s/seach chat/group name]", "➡ Specify group/chat name", "Retrives all/specied group/chat name(s)/id(s)."),
+        ("/keyword or /kw [show/add/remove]", "➡ Specify a keyword", "adds/removes/shows keywords that the bot will be catching"),
         ("/password or /pass [length|default(10)] (-s) for no special characters", "➡ Specify pass length", "Generate a random password."),
         ("/cmd", "", "Update the commands button (UI)."),
     ]
@@ -185,7 +215,7 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 parts = line.split(":")
                 if len(parts) >= 4:
                     resultfound = True
-                    if "http" in parts[0] or "android" in parts[0]:
+                    if "http" in parts[0].lower() or "android" in parts[0].lower() or "ftp" in parts[0].lower():
                         username = parts[2].strip() if len(parts) > 2 and parts[2].strip() != "" else "index has no username"
                         password = parts[3].strip() if len(parts) > 3 else "index has no password"
                     else:
@@ -249,7 +279,7 @@ async def search_command_raw(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 parts = line.split(":")
                 if len(parts) >= 4:
                     resultfound = True
-                    if "http" in parts[0] or "android" in parts[0]:
+                    if "http" in parts[0].lower() or "android" in parts[0].lower() or "ftp" in parts[0].lower():
                         username_password = ":".join(parts[2:4])
                     else:
                         username_password = ":".join(parts[0:2])
@@ -299,9 +329,9 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         await update.message.reply_text(f"This may take a while, please wait...")
 
-        program_path = 'FileFetcher.exe'
+        program_path = os.path.join(CURR_DIR, "FileFetcher.exe")
         if 'linux' in sys.platform:
-            program_path = './FileFetcher'
+            program_path = os.path.join(CURR_DIR, "FileFetcher")
 
         arguments = [program_path, query, FOLDER_NAME]
 
@@ -326,8 +356,8 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                                 file_size_mb = file_size / (1024 * 1024)
                                 if file_size_mb > 50:
                                     await update.message.reply_text("File is too large to upload, so telethon will be uploading it, please wait...", reply_to_message_id=update.message.message_id)
-                                    u_file = await client.upload_file(f_path)
-                                    await client.send_file(context.bot.id, u_file, force_document=True)
+                                    u_file = await CLIENT.upload_file(f_path)
+                                    await CLIENT.send_file(context.bot.id, u_file, force_document=True)
                                 else:
                                     await update.message.reply_text("Uploading in progress...")
                                     await context.bot.send_document(
@@ -375,8 +405,8 @@ async def download_file_name(update: Update, context: ContextTypes.DEFAULT_TYPE)
             file_size_mb = file_size / (1024 * 1024)
             if file_size_mb > 50:
                 await update.message.reply_text("File is too large to upload, so telethon will be uploading it, please wait...", reply_to_message_id=update.message.message_id)
-                u_file = await client.upload_file(file_path)
-                await client.send_file(context.bot.id, u_file, force_document=True)
+                u_file = await CLIENT.upload_file(file_path)
+                await CLIENT.send_file(context.bot.id, u_file, force_document=True)
             else:
                 with open(file_path, 'rb') as file:
                     await context.bot.send_document(
@@ -524,7 +554,7 @@ async def generate_password_command(update: Update, context: ContextTypes.DEFAUL
 @argument_required
 async def get_chats(update: Update, context: CallbackContext) -> None:
     try:
-        dialog_iterator = client.iter_dialogs()
+        dialog_iterator = CLIENT.iter_dialogs()
         chat_list = "Chat List:\n"
         line_counter = 0
         search_query = None
@@ -580,6 +610,7 @@ async def get_chats(update: Update, context: CallbackContext) -> None:
 
 @admin_only
 async def get_attachments(update: Update, context: CallbackContext) -> None:
+    LOG_DELAY = 10 # Not seconds just iterations
     try:
         args = context.args
         if len(args) == 1:
@@ -597,60 +628,165 @@ async def get_attachments(update: Update, context: CallbackContext) -> None:
             channel_id = int(load_channel_id())
         save_channel_id(channel_id)
 
+        program_path = os.path.join(CURR_DIR, "RyukDotnetBot.dll")
         process = subprocess.Popen(
-            ["dotnet", "RyukDotnetBot.dll", str(channel_id), str(limit), str(FOLDER_NAME)],
+            ["dotnet", program_path, str(channel_id), str(limit), str(WORKERS_FOLDER)],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
         )
         await update.message.reply_text(f'Spawning worker to download files from id "{channel_id}"')
-        message = await update.message.reply_text("Loading...", reply_to_message_id=update.message.message_id)
+        message = await update.message.reply_text("🔄 Loading...", reply_to_message_id=update.message.message_id)
         current_output = ""
+        update_delay = 0
         shittysolution = 0  # to make sure edit_message_text finishes sending all outputs
 
         while True:
             output = process.stdout.readline().rstrip()
+            if update_delay == LOG_DELAY:
+                update_delay = 0
             if output != current_output:
                 if output.strip():
+                    current_output = output
                     try:
-                        message = await context.bot.edit_message_text(
-                            chat_id=update.effective_chat.id,
-                            message_id=message.message_id,
-                            text=output
-                        )
-                        current_output = output
+                        if update_delay == 0:
+                            message = await context.bot.edit_message_text(
+                                chat_id=update.effective_chat.id,
+                                message_id=message.message_id,
+                                text=output
+                            )
+
+                        update_delay += 1
                     except error.BadRequest as e:
                         if message.message_id != update.message.message_id:
                             await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
                         message = await update.message.reply_text(output, reply_to_message_id=update.message.message_id)
-                        current_output = output
                     except Exception as e:
                         logger.error(e)
                         continue
             if process.poll() is not None:
                 shittysolution += 1
-                if shittysolution == 10:
+                if shittysolution == 15:
+                    await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
+                    message = await update.message.reply_text(current_output, reply_to_message_id=update.message.message_id)
                     if process.returncode != 0:
-                        await update.message.reply_text(f"Error: {process.returncode}",
+                        await update.message.reply_text(f"❗ Error: {process.returncode}",
                                                         reply_to_message_id=update.message.message_id)
                     else:
-                        await update.message.reply_text(f'Done!')
+                        await update.message.reply_text(f'✅ Done!')
                     break
                 else:
+                    update_delay = 0
                     continue
     except Exception as e:
         await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 
+@admin_only
+@argument_required
+async def handle_keyword_command(update: Update, context: CallbackContext):
+    global KEYWORDS
+    message = update.message.text
+    command, *args = message.split()[1:]
+
+    if command == 'add':
+        keyword = args[0]
+        if keyword in KEYWORDS:
+            await update.message.reply_text(f"⚠️ Keyword '{keyword}' is already added!")
+        else:
+            KEYWORDS.append(keyword)
+            await update.message.reply_text(f"✅ Keyword '{keyword}' added successfully!")
+            save_keywords()
+    elif command == 'remove':
+        keyword = args[0]
+        if keyword in KEYWORDS:
+            KEYWORDS.remove(keyword)
+            await update.message.reply_text(f"✅ Keyword '{keyword}' removed successfully!")
+            save_keywords()
+        else:
+            await update.message.reply_text(f"❗ Keyword '{keyword}' not found.")
+    elif command == 'show':
+        if len(KEYWORDS) == 0:
+            await update.message.reply_text("❗ No keywords found, use /kw add keyword")
+            return
+        keywords_str = '\n'.join(KEYWORDS)
+        await update.message.reply_text(f"Keywords ➡️:\n{keywords_str}")
+    elif command == 'disable':
+        await toggle_event("disable")
+        await update.message.reply_text("❌ Event handler disabled.")
+    elif command == 'enable':
+        await toggle_event("enable")
+        await update.message.reply_text("✅ Event handler enabled.")
+    else:
+        await update.message.reply_text(f"❗ Invalid command. Usage: /keyword [add|remove|show]")
+
+#telethon post event handler, poorly factored but who gives a fk
+async def handle_message(event):
+    sender = await event.get_sender()
+    message = event.message.message.lower()
+    bot_info = await BOT.get_me()
+    bot_id = bot_info.id
+
+    if sender.id == bot_id or event.chat_id == bot_id:
+        return
+    if sender.id == ALLOWED_USER_ID and message == "stop":
+        for proc in psutil.process_iter():
+            if proc.name() == "dotnet":
+                proc.kill()
+
+    for keyword in KEYWORDS:
+        if keyword in message:
+            chat_entity = await event.client.get_entity(event.chat_id)
+            try:
+                chat_username = chat_entity.username
+            except AttributeError:
+                chat_username = None
+            username = sender.username
+            if event.is_private:
+                phone_number = sender.phone
+            else:
+                phone_number = None
+            if event.is_channel and not event.is_group:
+                group_id = str(sender.id).replace("-", "")
+            else:
+                group_id = str(chat_entity.id).replace("-", "")
+
+            if chat_username is not None:
+                url = f"t.me/{chat_username}/{event.message.id}"
+                link_text = f"<a href='{url}'>View!</a>"
+            elif phone_number is not None:
+                url = f"t.me/+{phone_number}/{event.message.id}"
+                link_text = f"<a href='{url}'>View!</a>"
+            elif username is None:
+                url = f"t.me/c/{group_id}/{event.message.id}"
+                link_text = f"<a href='{url}'>View!</a>"
+                username = f"@{sender.id}"
+            else:
+                url = f"t.me/c/{group_id}/{event.message.id}"
+                link_text = f"<a href='{url}'>View!</a>"
+
+            final = f"⚠️: Keyword detected!\n\nMessage ➡️: 🟢 {message} 🔴 \n\nFrom: <code>{username} ({sender.id})</code>"
+
+            button = InlineKeyboardButton("Go to Message", url=url)
+            keyboard = InlineKeyboardMarkup([[button]])
+
+            await BOT.send_message(chat_id=ALLOWED_USER_ID, text=f"{final}\n{link_text}", reply_markup=keyboard, parse_mode='html')
+
+#telethon event handler
+@CLIENT.on(events.NewMessage)
+async def new_message_handler(event):
+    if is_handler_enabled:
+        await handle_message(event)
+
 # telethon connector
-def telethon_setup():
-    Session = "ryuk_sess"
-    # try:
-    #     os.remove(f"{Session}.session")
-    # except:
-    #     pass
-    client = TelegramClient(Session, API_ID, API_HASH)
-    client.start(PHONE_NUMBER, IIFA_PASSWORD)
-    return client
+async def telethon_setup():
+    await CLIENT.run_until_disconnected()
+
+async def toggle_event(option):
+    global is_handler_enabled
+    if option == "enable":
+        is_handler_enabled = True
+    if option == "disable":
+        is_handler_enabled = False
 
 def main() -> None:
     application = Application.builder().token(f"{BOT_TOKEN}").build()
@@ -668,13 +804,20 @@ def main() -> None:
     application.add_handler(CommandHandler("ls", ls_command))
     application.add_handler(CommandHandler(["getatt", "dla"], get_attachments))
     application.add_handler(CommandHandler(["getchats", "gc"], get_chats))
+    application.add_handler(CommandHandler(["keyword", "kw"], handle_keyword_command))
     application.add_handler(MessageHandler(None, unknown_command))
     application.run_polling()
 
+def Start_Bots():
+    asyncio.gather(
+        telethon_setup(),
+        main(),
+    )
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "--nt":
-            pass
-    else:
-        client = telethon_setup()
-    main()
+    print("Starting...")
+    load_keywords()
+    global is_handler_enabled
+    is_handler_enabled = True
+    CLIENT.start(PHONE_NUMBER, IIFA_PASSWORD)
+    asyncio.run(Start_Bots())
