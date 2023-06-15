@@ -61,7 +61,7 @@ IIFA_PASSWORD = lines[3].strip().split('=')[1]
 ALLOWED_USER_ID = int("")
 BOT_TOKEN = ""
 ENCODING = "utf-8"
-DEFAULT_CHANNEL_ID = 
+DEFAULT_CHANNEL_ID =
 CHANNEL_ID_FILE = "channel_id"
 WORKERS_FOLDER = "worker"
 FOLDER_NAME = os.path.join(CURR_DIR, WORKERS_FOLDER)
@@ -818,6 +818,6 @@ if __name__ == "__main__":
     print("Starting...")
     load_keywords()
     global is_handler_enabled
-    is_handler_enabled = True
+    is_handler_enabled = False
     CLIENT.start(PHONE_NUMBER, IIFA_PASSWORD)
     asyncio.run(Start_Bots())
