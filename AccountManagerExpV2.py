@@ -9,12 +9,12 @@ from functools import wraps
 import codecs
 import random
 import subprocess
-from tracemalloc import stop
 from telegram import __version__ as TG_VER
 import secrets
 import string
 import json
 import psutil
+import re
 
 try:
     from telegram import __version_info__
@@ -29,7 +29,8 @@ if __version_info__ < (20, 0, 0, "alpha", 1):
     )
 from telegram import ReplyKeyboardRemove, Update, InputFile, BotCommand, Bot, error, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, CallbackContext
-from telethon.sync import TelegramClient, events, types
+from telethon.sync import TelegramClient, events
+from telethon.tl.types import Channel
 
 # logging.basicConfig(filename='ryukerr.log', level=logging.DEBUG,
 #                     format='%(asctime)s %(levelname)s %(name)s %(message)s')
@@ -78,14 +79,14 @@ bot_commands = [
     BotCommand("findraw", "ex: /findraw netflix"),
     BotCommand("download", "ex: /download netflix"),
     BotCommand("downloadfile", "ex: /downloadfile netflix"),
-    BotCommand("ls", "List all files in the current directory."),
+    BotCommand("ls or ls [dirname]", "List all files in the current directory."),
     BotCommand("remove", "ex: /remove netflix.txt"),
     BotCommand("rename", "ex: /rename netflix.txt, /rn all"),
     BotCommand("password", "ex: /password, /pass 50"),
     BotCommand("execute", "ex: /exec mv filename, /exec ls"),
     BotCommand("getatt", "ex: /getatt -923987905 2, /getatt 100"),
     BotCommand("getchats", "ex: /gc s group/chatname, /getchats all"),
-    BotCommand("keyword", "ex: /keyword add/remove example, /keyword show"),
+    BotCommand("keyword", "ex: /keyword add/remove example, /keyword show/status"),
     BotCommand("cmd", "Update the commands button (UI).")
 ]
 
@@ -116,7 +117,7 @@ def load_channel_id():
 
 # unknown command handler
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.forward_from or update.message.forward_from_chat:
+    if update.message.forward_from or update.message.forward_from_chat or update.message.text == "stop":
         return
     if update.message.document:
         await update.message.reply_text("Your file is ready!", reply_to_message_id=update.message.message_id)
@@ -166,13 +167,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         ("/findraw or /fr [query]", "➡ Specify a search query", "Search for credentials based on a query and display them in raw format."),
         ("/download or /dl [query]", "➡ Specify a search query", "Download all found credentials for a query as a file."),
         ("/downloadfile or /dlf [file_name]", "➡ Specify a file name", "Download a specific file from the server."),
-        ("/ls", "", "List all files in the current directory."),
+        ("ls or ls [dirname]", "➡ Optionally specify a dir name", "List all files in the current directory."),
         ("/rm or /remove [file_name]", "➡ Specify a file name", "Delete a specific file."),
         ("/rn or /rename [file_name new_name] or [all|all name]", "➡ Specify a file name", "Rename a specific file or all files."),
         ("/execute or /exec [command]", "➡ Specify system command", "Execute a system command."),
         ("/getatt or /dla [channel_id and or limit]", "➡ Specify channel_id and or limit", "Downloads attachments from desired chat id."),
         ("/getchats or /gc [all or s/seach chat/group name]", "➡ Specify group/chat name", "Retrives all/specied group/chat name(s)/id(s)."),
-        ("/keyword or /kw [show/add/remove]", "➡ Specify a keyword", "adds/removes/shows keywords that the bot will be catching"),
+        ("/keyword or /kw [show/add/remove/status]", "➡ Specify a keyword", "adds/removes/shows keywords that the bot will be catching"),
         ("/password or /pass [length|default(10)] (-s) for no special characters", "➡ Specify pass length", "Generate a random password."),
         ("/cmd", "", "Update the commands button (UI)."),
     ]
@@ -213,14 +214,18 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             for line in lines:
                 line = line.strip()
                 parts = line.split(":")
-                if len(parts) >= 4:
+                if len(parts) >= 3:
                     resultfound = True
-                    if "http" in parts[0].lower() or "android" in parts[0].lower() or "ftp" in parts[0].lower():
-                        username = parts[2].strip() if len(parts) > 2 and parts[2].strip() != "" else "index has no username"
-                        password = parts[3].strip() if len(parts) > 3 else "index has no password"
-                    else:
-                        username = parts[0].strip() if len(parts) > 2 and parts[2].strip() != "" else "index has no username"
-                        password = parts[1].strip() if len(parts) > 3 else "index has no password"
+                    if "password" in parts[0].lower():
+                        username = parts[1].strip() if len(parts) > 1 and parts[2].strip() != "" else "index has no username"
+                        password = parts[2].strip() if len(parts) > 2 else "index has no password"
+                    if len(parts) == 4:
+                        if "http" in parts[0].lower() or "android" in parts[0].lower() or "ftp" in parts[0].lower() or "password" in parts[0].lower():
+                            username = parts[2].strip() if len(parts) > 2 and parts[2].strip() != "" else "index has no username"
+                            password = parts[3].strip() if len(parts) > 3 else "index has no password"
+                        else:
+                            username = parts[0].strip() if len(parts) > 2 and parts[2].strip() != "" else "index has no username"
+                            password = parts[1].strip() if len(parts) > 3 else "index has no password"
 
                     response.append(f"\nUsername: {username}\nPassword: {password}")
 
@@ -246,7 +251,6 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("No credentials found.", reply_to_message_id=update.message.message_id)
     except Exception as e:
         await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
-
 
 @admin_only
 @argument_required
@@ -277,12 +281,15 @@ async def search_command_raw(update: Update, context: ContextTypes.DEFAULT_TYPE)
             for line in lines:
                 line = line.strip()
                 parts = line.split(":")
-                if len(parts) >= 4:
+                if len(parts) >= 3:
                     resultfound = True
-                    if "http" in parts[0].lower() or "android" in parts[0].lower() or "ftp" in parts[0].lower():
-                        username_password = ":".join(parts[2:4])
-                    else:
-                        username_password = ":".join(parts[0:2])
+                    if "password" in parts[0].lower():
+                        username_password = ":".join(parts[1:3])
+                    if len(parts) == 4:
+                        if "http" in parts[0].lower() or "android" in parts[0].lower() or "ftp" in parts[0].lower() or "password" in parts[0].lower():
+                            username_password = ":".join(parts[2:4])
+                        else:
+                            username_password = ":".join(parts[0:2])
                     response.append(username_password)
 
                     lines_processed += 1
@@ -336,8 +343,8 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         arguments = [program_path, query, FOLDER_NAME]
 
         try:
-            process = subprocess.Popen(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            output, error = process.communicate()
+            process = await asyncio.create_subprocess_exec(*arguments, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            output, error = await process.communicate()
 
             output = output.decode()
             error = error.decode()
@@ -374,7 +381,11 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             elif error:
                 await update.message.reply_text(f"Error: {error}", reply_to_message_id=update.message.message_id)
             else:
-                await update.message.reply_text("No output received.", reply_to_message_id=update.message.message_id)
+                for filename in os.listdir(FOLDER_NAME):
+                    if re.match(r"log\d+\.txt$", filename):
+                        file_path = os.path.join(FOLDER_NAME, filename)
+                        os.remove(file_path)
+                await update.message.reply_text("❗ Process has been stopped")
 
         except Exception as e:
             await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
@@ -386,11 +397,17 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def ls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Process the ls command to list all files in the current directory."""
     try:
-        file_list = os.listdir(FOLDER_NAME)
-        file_list_formatted = '\n'.join(file_list)
-        await update.message.reply_text(f"Files in current directory:\n{file_list_formatted}",reply_to_message_id=update.message.message_id)
+        try:
+            ls_dir = context.args[0]
+        except:
+            ls_dir = "."
+        file_list = os.listdir(ls_dir)
+        file_list_with_dir = [f"{item} => Dir" if os.path.isdir(os.path.join(ls_dir, item)) else item for item in file_list]
+
+        file_list_formatted = '\n'.join(file_list_with_dir)
+        await update.message.reply_text(f"Files in current directory:\n{file_list_formatted}", reply_to_message_id=update.message.message_id)
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}",reply_to_message_id=update.message.message_id)
+        await update.message.reply_text(f"Error: {e}", reply_to_message_id=update.message.message_id)
 
 @admin_only
 @argument_required
@@ -670,7 +687,9 @@ async def get_attachments(update: Update, context: CallbackContext) -> None:
                 if shittysolution == 15:
                     await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
                     message = await update.message.reply_text(current_output, reply_to_message_id=update.message.message_id)
-                    if process.returncode != 0:
+                    if process.returncode == -9:
+                        await update.message.reply_text(f"❗ Process has been stopped")
+                    elif  process.returncode != 0:
                         await update.message.reply_text(f"❗ Error: {process.returncode}",
                                                         reply_to_message_id=update.message.message_id)
                     else:
@@ -711,6 +730,11 @@ async def handle_keyword_command(update: Update, context: CallbackContext):
             return
         keywords_str = '\n'.join(KEYWORDS)
         await update.message.reply_text(f"Keywords ➡️:\n{keywords_str}")
+    elif command == 'status':
+        if is_handler_enabled:
+            await update.message.reply_text("✅ Bot is currently capturing keywords")
+        if not is_handler_enabled:
+            await update.message.reply_text("❌ Event handler is disabled, use /kw enable")
     elif command == 'disable':
         await toggle_event("disable")
         await update.message.reply_text("❌ Event handler disabled.")
@@ -727,12 +751,16 @@ async def handle_message(event):
     bot_info = await BOT.get_me()
     bot_id = bot_info.id
 
-    if sender.id == bot_id or event.chat_id == bot_id:
-        return
+    # testing! only for linux
     if sender.id == ALLOWED_USER_ID and message == "stop":
         for proc in psutil.process_iter():
             if proc.name() == "dotnet":
                 proc.kill()
+            elif proc.name() == "FileFetcher":
+                proc.kill()
+
+    if sender.id == bot_id or event.chat_id == bot_id:
+        return
 
     for keyword in KEYWORDS:
         if keyword in message:
